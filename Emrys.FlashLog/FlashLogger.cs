@@ -2,26 +2,17 @@
 using log4net.Config;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Emrys.FlashLog
 {
     public sealed class FlashLogger
     {
         /// <summary>
-        /// 记录消息Queue
+        /// 日志
         /// </summary>
-        private readonly ConcurrentQueue<FlashLogMessage> _que;
-
-        /// <summary>
-        /// 信号
-        /// </summary>
-        private readonly ManualResetEvent _mre;
+        private static FlashLogger _flashLog = new FlashLogger();
 
         /// <summary>
         /// 日志
@@ -29,10 +20,14 @@ namespace Emrys.FlashLog
         private readonly ILog _log;
 
         /// <summary>
-        /// 日志
+        /// 信号
         /// </summary>
-        private static FlashLogger _flashLog = new FlashLogger();
+        private readonly ManualResetEvent _mre;
 
+        /// <summary>
+        /// 记录消息Queue
+        /// </summary>
+        private readonly ConcurrentQueue<FlashLogMessage> _que;
 
         private FlashLogger()
         {
@@ -50,6 +45,26 @@ namespace Emrys.FlashLog
             _log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         }
 
+        public static void Debug(string msg, Exception ex = null)
+        {
+            Instance().EnqueueMessage(msg, FlashLogLevel.Debug, ex);
+        }
+
+        public static void Error(string msg, Exception ex = null)
+        {
+            Instance().EnqueueMessage(msg, FlashLogLevel.Error, ex);
+        }
+
+        public static void Fatal(string msg, Exception ex = null)
+        {
+            Instance().EnqueueMessage(msg, FlashLogLevel.Fatal, ex);
+        }
+
+        public static void Info(string msg, Exception ex = null)
+        {
+            Instance().EnqueueMessage(msg, FlashLogLevel.Info, ex);
+        }
+
         /// <summary>
         /// 实现单例
         /// </summary>
@@ -57,6 +72,37 @@ namespace Emrys.FlashLog
         public static FlashLogger Instance()
         {
             return _flashLog;
+        }
+
+        public static void Warn(string msg, Exception ex = null)
+        {
+            Instance().EnqueueMessage(msg, FlashLogLevel.Warn, ex);
+        }
+
+        /// <summary>
+        /// 写日志
+        /// </summary>
+        /// <param name="message">日志文本</param>
+        /// <param name="level">等级</param>
+        /// <param name="ex">Exception</param>
+        private void EnqueueMessage(string message, FlashLogLevel level, Exception ex = null)
+        {
+            if ((level == FlashLogLevel.Debug && _log.IsDebugEnabled)
+             || (level == FlashLogLevel.Error && _log.IsErrorEnabled)
+             || (level == FlashLogLevel.Fatal && _log.IsFatalEnabled)
+             || (level == FlashLogLevel.Info && _log.IsInfoEnabled)
+             || (level == FlashLogLevel.Warn && _log.IsWarnEnabled))
+            {
+                _que.Enqueue(new FlashLogMessage
+                {
+                    Message = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss,fff") + "]\r\n" + message,
+                    Level = level,
+                    Exception = ex
+                });
+
+                // 通知线程往磁盘中写日志
+                _mre.Set();
+            }
         }
 
         /// <summary>
@@ -89,15 +135,19 @@ namespace Emrys.FlashLog
                         case FlashLogLevel.Debug:
                             _log.Debug(msg.Message, msg.Exception);
                             break;
+
                         case FlashLogLevel.Info:
                             _log.Info(msg.Message, msg.Exception);
                             break;
+
                         case FlashLogLevel.Error:
                             _log.Error(msg.Message, msg.Exception);
                             break;
+
                         case FlashLogLevel.Warn:
                             _log.Warn(msg.Message, msg.Exception);
                             break;
+
                         case FlashLogLevel.Fatal:
                             _log.Fatal(msg.Message, msg.Exception);
                             break;
@@ -109,64 +159,5 @@ namespace Emrys.FlashLog
                 Thread.Sleep(1);
             }
         }
-
-
-        /// <summary>
-        /// 写日志
-        /// </summary>
-        /// <param name="message">日志文本</param>
-        /// <param name="level">等级</param>
-        /// <param name="ex">Exception</param>
-        public void EnqueueMessage(string message, FlashLogLevel level, Exception ex = null)
-        {
-            if ((level == FlashLogLevel.Debug && _log.IsDebugEnabled)
-             || (level == FlashLogLevel.Error && _log.IsErrorEnabled)
-             || (level == FlashLogLevel.Fatal && _log.IsFatalEnabled)
-             || (level == FlashLogLevel.Info && _log.IsInfoEnabled)
-             || (level == FlashLogLevel.Warn && _log.IsWarnEnabled))
-            {
-                _que.Enqueue(new FlashLogMessage
-                {
-                    Message = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss,fff") + "]\r\n" + message,
-                    Level = level,
-                    Exception = ex
-                });
-
-                // 通知线程往磁盘中写日志
-                _mre.Set();
-            }
-        }
-
-        public static void Debug(string msg, Exception ex = null)
-        {
-            Instance().EnqueueMessage(msg, FlashLogLevel.Debug, ex);
-        }
-
-        public static void Error(string msg, Exception ex = null)
-        {
-            Instance().EnqueueMessage(msg, FlashLogLevel.Error, ex);
-        }
-
-        public static void Fatal(string msg, Exception ex = null)
-        {
-            Instance().EnqueueMessage(msg, FlashLogLevel.Fatal, ex);
-        }
-
-        public static void Info(string msg, Exception ex = null)
-        {
-            Instance().EnqueueMessage(msg, FlashLogLevel.Info, ex);
-        }
-
-        public static void Warn(string msg, Exception ex = null)
-        {
-            Instance().EnqueueMessage(msg, FlashLogLevel.Warn, ex);
-        }
-
     }
-
-
-
-
-
-
 }
